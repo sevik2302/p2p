@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Объявления — NEXORA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .type-toggle { display: flex; gap: 8px; margin-bottom: 4px; }
+  .type-toggle .opt {
+    flex: 1; text-align: center; padding: 10px; border-radius: 9px;
+    border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text-muted); cursor: pointer; font-weight: 600; font-size: 13.5px;
+    transition: all 0.25s var(--ease-spring);
+  }
+  .type-toggle .opt.sell.active { background: var(--red-dim); color: var(--red); border-color: rgba(246,70,93,0.4); }
+  .type-toggle .opt.buy.active { background: var(--green-dim); color: var(--green); border-color: rgba(23,199,132,0.4); }
+  .filter-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .filter-tabs .ft {
+    padding: 7px 14px; border-radius: 100px; font-size: 13px; cursor: pointer;
+    background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border);
+    transition: all 0.25s var(--ease-out);
+  }
+  .filter-tabs .ft.active { background: var(--gold); color: #14120a; border-color: var(--gold); }
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a class="brand" href="/dashboard.html"><span class="brand-mark"></span>NEXORA</a>
+  <div class="navlinks">
+    <a href="/dashboard.html">Кабинет</a>
+    <a class="active" href="/offers.html">Объявления</a>
+    <a class="logout" href="#" onclick="logout()">Выйти</a>
+  </div>
+</nav>
+
+<div class="container page-enter">
+
+  <div class="card">
+    <span class="eyebrow">Новое объявление</span>
+    <div id="createError" class="error"></div>
+
+    <div class="type-toggle">
+      <div class="opt sell active" id="optSell" onclick="setType('sell')">Продаю крипту</div>
+      <div class="opt buy" id="optBuy" onclick="setType('buy')">Покупаю крипту</div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Цена за 1 USDT (RUB)</label>
+        <input id="offPrice" type="number" placeholder="95.40">
+      </div>
+      <div>
+        <label>Доступно USDT</label>
+        <input id="offAmount" type="number" step="0.00000001" placeholder="500">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Мин. сумма (RUB)</label>
+        <input id="offMin" type="number" placeholder="1000">
+      </div>
+      <div>
+        <label>Макс. сумма (RUB)</label>
+        <input id="offMax" type="number" placeholder="50000">
+      </div>
+    </div>
+    <label>Способ оплаты</label>
+    <input id="offMethod" placeholder="Банковский перевод, СБП…">
+    <label>Условия сделки (необязательно)</label>
+    <textarea id="offTerms" placeholder="Например: оплата в течение 15 минут"></textarea>
+    <button onclick="createOffer()">Разместить объявление</button>
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">Рынок P2P</span>
+    <div class="filter-tabs">
+      <div class="ft active" data-f="all" onclick="filterOffers('all')">Все</div>
+      <div class="ft" data-f="sell" onclick="filterOffers('sell')">Продажа</div>
+      <div class="ft" data-f="buy" onclick="filterOffers('buy')">Покупка</div>
+    </div>
+    <div id="offersList"></div>
+  </div>
+
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuthOrRedirect();
+document.getElementById('offersList').innerHTML = skeletonRows(4);
+
+function logout() { API.clearToken(); window.location.href = '/index.html'; }
+
+let currentType = 'sell';
+let currentFilter = 'all';
+let allOffers = [];
+
+function setType(t) {
+  currentType = t;
+  document.getElementById('optSell').classList.toggle('active', t === 'sell');
+  document.getElementById('optBuy').classList.toggle('active', t === 'buy');
+}
+
+function filterOffers(f) {
+  currentFilter = f;
+  document.querySelectorAll('.ft').forEach(el => el.classList.toggle('active', el.dataset.f === f));
+  renderOffers();
+}
+
+async function createOffer() {
+  const btn = event.target;
+  document.getElementById('createError').textContent = '';
+  btn.disabled = true;
+  try {
+    await API.post('/offers', {
+      type: currentType,
+      price: document.getElementById('offPrice').value,
+      minAmount: document.getElementById('offMin').value,
+      maxAmount: document.getElementById('offMax').value,
+      availableAmount: document.getElementById('offAmount').value,
+      paymentMethod: document.getElementById('offMethod').value,
+      terms: document.getElementById('offTerms').value
+    });
+    toast('Объявление размещено', 'ok');
+    loadOffers();
+  } catch (e) {
+    document.getElementById('createError').textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderOffers() {
+  const list = document.getElementById('offersList');
+  const filtered = currentFilter === 'all' ? allOffers : allOffers.filter(o => o.type === currentFilter);
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">◇</div>Нет объявлений по этому фильтру</div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(o => `
+    <div class="offer-item" onclick="openOffer('${o.id}')">
+      <div class="offer-main">
+        <span class="badge ${o.type}">${o.type === 'sell' ? 'Продажа' : 'Покупка'}</span>
+        <span class="muted" style="font-size:13px">${o.User ? o.User.username : 'аноним'} · ${o.paymentMethod}</span>
+      </div>
+      <div style="text-align:right">
+        <div class="offer-price">${o.price} ${o.fiatCurrency}</div>
+        <div class="muted" style="font-size:12px">${o.availableAmount} ${o.asset} доступно</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadOffers() {
+  allOffers = await API.get('/offers');
+  renderOffers();
+}
+
+async function openOffer(id) {
+  const amount = prompt('Сколько USDT хотите обменять?');
+  if (!amount) return;
+  try {
+    const trade = await API.post('/trades', { offerId: id, amountCrypto: amount });
+    toast('Сделка открыта', 'ok');
+    window.location.href = '/trade.html?id=' + trade.id;
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+loadOffers();
+</script>
+</body>
+</html>

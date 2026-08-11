@@ -1,0 +1,26 @@
+databases:
+  - name: p2p-exchange-db
+    plan: free
+    databaseName: p2p_exchange
+    user: p2p_exchange
+
+services:
+  - type: web
+    name: p2p-exchange
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: p2p-exchange-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WALLET_ENCRYPTION_KEY
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000

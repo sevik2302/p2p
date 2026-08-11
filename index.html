@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXORA — вход</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-box page-enter">
+    <div class="auth-logo">
+      <div class="brand-mark"></div>
+      <span>NEXORA</span>
+    </div>
+
+    <div class="tabs">
+      <div class="tab-btn active" id="tabLogin" onclick="switchTab('login')">Вход</div>
+      <div class="tab-btn" id="tabReg" onclick="switchTab('reg')">Регистрация</div>
+    </div>
+
+    <div class="card auth-panel visible" id="panelLogin">
+      <div id="loginError" class="error"></div>
+      <label>Email или username</label>
+      <input id="loginId" placeholder="you@example.com">
+      <label>Пароль</label>
+      <input id="loginPass" type="password" placeholder="••••••••">
+      <button onclick="doLogin()">Войти</button>
+    </div>
+
+    <div class="card auth-panel" id="panelReg">
+      <div id="regError" class="error"></div>
+      <label>Email</label>
+      <input id="regEmail" placeholder="you@example.com">
+      <label>Username</label>
+      <input id="regUsername" placeholder="Ваш никнейм">
+      <label>Пароль</label>
+      <input id="regPass" type="password" placeholder="Минимум 8 символов">
+      <button onclick="doRegister()">Создать аккаунт</button>
+    </div>
+
+    <p class="auth-foot">Регистрируясь, вы соглашаетесь с условиями площадки. Каждому аккаунту автоматически выпускается персональный криптокошелёк.</p>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+if (API.token()) window.location.href = '/dashboard.html';
+
+function switchTab(name) {
+  document.getElementById('tabLogin').classList.toggle('active', name === 'login');
+  document.getElementById('tabReg').classList.toggle('active', name === 'reg');
+  document.getElementById('panelLogin').classList.toggle('visible', name === 'login');
+  document.getElementById('panelReg').classList.toggle('visible', name === 'reg');
+}
+
+function setLoading(btn, loading) {
+  btn.disabled = loading;
+  btn.style.opacity = loading ? 0.6 : 1;
+}
+
+async function doLogin() {
+  const btn = event.target;
+  document.getElementById('loginError').textContent = '';
+  setLoading(btn, true);
+  try {
+    const data = await API.post('/auth/login', {
+      emailOrUsername: document.getElementById('loginId').value,
+      password: document.getElementById('loginPass').value
+    });
+    API.setToken(data.token);
+    window.location.href = '/dashboard.html';
+  } catch (e) {
+    document.getElementById('loginError').textContent = e.message;
+    setLoading(btn, false);
+  }
+}
+
+async function doRegister() {
+  const btn = event.target;
+  document.getElementById('regError').textContent = '';
+  setLoading(btn, true);
+  try {
+    const data = await API.post('/auth/register', {
+      email: document.getElementById('regEmail').value,
+      username: document.getElementById('regUsername').value,
+      password: document.getElementById('regPass').value
+    });
+    API.setToken(data.token);
+    window.location.href = '/dashboard.html';
+  } catch (e) {
+    document.getElementById('regError').textContent = e.message;
+    setLoading(btn, false);
+  }
+}
+</script>
+</body>
+</html>

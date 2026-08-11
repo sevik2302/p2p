@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сделка — NEXORA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="topnav">
+  <a class="brand" href="/dashboard.html"><span class="brand-mark"></span>NEXORA</a>
+  <div class="navlinks">
+    <a href="/dashboard.html">Кабинет</a>
+    <a href="/offers.html">Объявления</a>
+  </div>
+</nav>
+
+<div class="container page-enter">
+
+  <div class="card">
+    <span class="eyebrow">Сделка №<span id="tradeShortId">—</span></span>
+    <div id="tradeInfo"></div>
+
+    <div class="stepper" id="stepper">
+      <div class="step-dot" data-s="pending_payment"></div>
+      <div class="step-line"><div class="fill"></div></div>
+      <div class="step-dot" data-s="paid"></div>
+      <div class="step-line"><div class="fill"></div></div>
+      <div class="step-dot" data-s="completed"></div>
+    </div>
+    <div class="step-labels">
+      <span>Открыта</span>
+      <span>Оплачено</span>
+      <span>Завершена</span>
+    </div>
+
+    <div id="actions" class="row" style="margin-top:16px"></div>
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">Чат по сделке</span>
+    <div id="messages"></div>
+    <div class="row" style="margin-top:8px">
+      <input id="msgInput" placeholder="Написать сообщение…" onkeydown="if(event.key==='Enter') sendMsg()">
+      <button style="width:auto;flex:0 0 auto;padding:12px 18px" onclick="sendMsg()">Отправить</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuthOrRedirect();
+const tradeId = new URLSearchParams(window.location.search).get('id');
+document.getElementById('tradeShortId').textContent = tradeId ? tradeId.slice(0, 8) : '—';
+let myId = null;
+
+const STATUS_LABELS = {
+  pending_payment: 'Ожидает оплаты',
+  paid: 'Оплачено, ждёт подтверждения',
+  completed: 'Завершена',
+  disputed: 'Открыт спор',
+  cancelled: 'Отменена'
+};
+const STEP_ORDER = ['pending_payment', 'paid', 'completed'];
+
+function updateStepper(status) {
+  const idx = STEP_ORDER.indexOf(status);
+  document.querySelectorAll('.step-dot').forEach((dot, i) => {
+    dot.classList.remove('done', 'active');
+    if (idx === -1) return; // disputed/cancelled — leave neutral
+    if (i < idx) dot.classList.add('done');
+    else if (i === idx) dot.classList.add('active');
+  });
+  document.querySelectorAll('.step-line .fill').forEach((fill, i) => {
+    fill.style.transform = (idx > i) ? 'scaleX(1)' : 'scaleX(0)';
+  });
+}
+
+async function load() {
+  const me = await API.get('/auth/me');
+  myId = me.user.id;
+
+  const trade = await API.get('/trades/' + tradeId);
+  const iAmSeller = trade.sellerId === myId;
+  const iAmBuyer = trade.buyerId === myId;
+
+  document.getElementById('tradeInfo').innerHTML = `
+    <div class="stat-row">
+      <div class="stat-big">${trade.amountCrypto}<span class="unit">USDT</span></div>
+      <span class="badge status-${trade.status}">${STATUS_LABELS[trade.status] || trade.status}</span>
+    </div>
+    <div class="stat-sub">≈ ${trade.amountFiat} · вы ${iAmSeller ? 'продавец' : 'покупатель'}</div>
+  `;
+
+  updateStepper(trade.status);
+
+  const actions = document.getElementById('actions');
+  actions.innerHTML = '';
+
+  if (iAmBuyer && trade.status === 'pending_payment') {
+    actions.innerHTML += `<button onclick="markPaid()">Я оплатил</button>`;
+  }
+  if (iAmSeller && trade.status === 'paid') {
+    actions.innerHTML += `<button onclick="release()">Подтвердить и отпустить крипту</button>`;
+  }
+  if (['pending_payment', 'paid'].includes(trade.status)) {
+    actions.innerHTML += `<button class="danger" onclick="openDispute()">Открыть спор</button>`;
+  }
+  if (iAmSeller && trade.status === 'pending_payment') {
+    actions.innerHTML += `<button class="secondary" onclick="cancelTrade()">Отменить сделку</button>`;
+  }
+
+  const msgs = document.getElementById('messages');
+  const tradeMessages = trade.TradeMessages || [];
+  if (!tradeMessages.length) {
+    msgs.innerHTML = `<div class="empty-state" style="padding:16px"><div class="icon">✎</div>Сообщений пока нет</div>`;
+  } else {
+    msgs.innerHTML = tradeMessages.map(m => `
+      <div class="msg ${m.senderId === myId ? 'mine' : ''}">${m.message}</div>
+    `).join('');
+  }
+}
+
+async function markPaid() { await API.post(`/trades/${tradeId}/paid`); toast('Отмечено как оплаченное', 'ok'); load(); }
+async function release() { await API.post(`/trades/${tradeId}/release`); toast('Крипта отправлена покупателю', 'ok'); load(); }
+async function cancelTrade() { await API.post(`/trades/${tradeId}/cancel`); toast('Сделка отменена', 'ok'); load(); }
+async function openDispute() {
+  const reason = prompt('Опишите причину спора:');
+  if (!reason) return;
+  await API.post(`/trades/${tradeId}/dispute`, { reason });
+  toast('Спор открыт, ожидайте решения администратора', 'err');
+  load();
+}
+async function sendMsg() {
+  const input = document.getElementById('msgInput');
+  if (!input.value.trim()) return;
+  await API.post(`/trades/${tradeId}/message`, { message: input.value });
+  input.value = '';
+  load();
+}
+
+load();
+</script>
+</body>
+</html>

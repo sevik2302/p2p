@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Кабинет — NEXORA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="topnav">
+  <a class="brand" href="/dashboard.html"><span class="brand-mark"></span>NEXORA</a>
+  <div class="navlinks">
+    <a class="active" href="/dashboard.html">Кабинет</a>
+    <a href="/offers.html">Объявления</a>
+    <a class="logout" href="#" onclick="logout()">Выйти</a>
+  </div>
+</nav>
+
+<div class="container page-enter">
+
+  <div class="card">
+    <span class="eyebrow">Баланс аккаунта</span>
+    <div class="stat-row">
+      <div class="stat-big"><span id="balanceNum">0.00</span><span class="unit">USDT</span></div>
+    </div>
+    <div class="stat-sub" id="lockedInfo">в эскроу заблокировано: —</div>
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">Персональный криптокошелёк</span>
+    <h2 id="walletNetwork">Загрузка сети…</h2>
+    <div class="address-box">
+      <span class="mono" id="walletAddress">—</span>
+      <button class="copy-btn" onclick="copyText(document.getElementById('walletAddress').textContent, this)">Копировать</button>
+    </div>
+    <p class="muted" style="font-size:13px;margin:0">Отправьте USDT на этот адрес — после подтверждения администратором средства появятся на балансе.</p>
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">Последние сделки</span>
+    <div id="tradesList"></div>
+  </div>
+
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuthOrRedirect();
+document.getElementById('tradesList').innerHTML = skeletonRows(3);
+
+function logout() { API.clearToken(); window.location.href = '/index.html'; }
+
+const STATUS_LABELS = {
+  pending_payment: 'Ожидает оплаты',
+  paid: 'Оплачено, ждёт подтверждения',
+  completed: 'Завершена',
+  disputed: 'Спор',
+  cancelled: 'Отменена'
+};
+
+async function load() {
+  try {
+    const me = await API.get('/auth/me');
+    animateNumber(document.getElementById('balanceNum'), Number(me.user.balance), 2);
+    document.getElementById('lockedInfo').textContent = `в эскроу заблокировано: ${me.user.balanceLocked} USDT`;
+
+    const wallet = await API.get('/wallet/me');
+    document.getElementById('walletNetwork').textContent = 'Сеть: ' + wallet.network;
+    document.getElementById('walletAddress').textContent = wallet.address;
+
+    const trades = await API.get('/trades');
+    const list = document.getElementById('tradesList');
+    if (!trades.length) {
+      list.innerHTML = `<div class="empty-state"><div class="icon">◇</div>Пока нет сделок — откройте объявление, чтобы начать первую</div>`;
+    } else {
+      list.innerHTML = trades.map(t => `
+        <div class="trade-item" onclick="window.location.href='/trade.html?id=${t.id}'">
+          <span class="mono">${t.amountCrypto} USDT <span class="muted">≈ ${t.amountFiat}</span></span>
+          <span class="badge status-${t.status}">${STATUS_LABELS[t.status] || t.status}</span>
+        </div>
+      `).join('');
+    }
+  } catch (e) {
+    if (e.message.includes('токен') || e.message.includes('авториз')) {
+      logout();
+    } else {
+      toast(e.message, 'err');
+    }
+  }
+}
+load();
+</script>
+</body>
+</html>
